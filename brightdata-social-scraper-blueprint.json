@@ -1,0 +1,861 @@
+{
+  "name": "Bright Data Social Media Scraper - Facebook, Twitter, LinkedIn",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": "__WEBHOOK_ID__",
+        "maxResults": 1
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0
+        },
+        "restore": {
+          "parameters": {
+            "hook": {
+              "label": "Social Scraper Webhook"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "hook",
+            "type": "hook:gateway-webhook",
+            "label": "Webhook"
+          },
+          {
+            "name": "maxResults",
+            "type": "number",
+            "label": "Maximum number of results"
+          }
+        ],
+        "expect": [
+          {
+            "name": "facebook_urls",
+            "type": "array",
+            "label": "Facebook Page/Profile URLs",
+            "spec": {
+              "type": "text"
+            }
+          },
+          {
+            "name": "twitter_urls",
+            "type": "array",
+            "label": "Twitter Profile URLs",
+            "spec": {
+              "type": "text"
+            }
+          },
+          {
+            "name": "linkedin_urls",
+            "type": "array",
+            "label": "LinkedIn Profile/Company URLs",
+            "spec": {
+              "type": "text"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "module": "util:SetVariables",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "variables": [
+          {
+            "name": "end_date",
+            "value": "{{formatDate(now; \"MM-DD-YYYY\")}}"
+          },
+          {
+            "name": "start_date",
+            "value": "{{formatDate(addDays(now; -7); \"MM-DD-YYYY\")}}"
+          },
+          {
+            "name": "brightdata_api_key",
+            "value": "__YOUR_BRIGHTDATA_API_KEY__"
+          },
+          {
+            "name": "all_posts",
+            "value": "[]"
+          }
+        ],
+        "scope": "roundtrip"
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0,
+          "name": "Set Date Variables"
+        },
+        "restore": {},
+        "expect": [
+          {
+            "name": "variables",
+            "type": "array",
+            "label": "Variables"
+          },
+          {
+            "name": "scope",
+            "type": "select",
+            "label": "Variable lifetime"
+          }
+        ]
+      }
+    },
+    {
+      "id": 100,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "parameters": {
+        "routes": [
+          {
+            "flow": [
+              {
+                "id": 101,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "array": "{{1.facebook_urls}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 600,
+                    "y": -300,
+                    "name": "Iterator - Facebook URLs"
+                  }
+                }
+              },
+              {
+                "id": 102,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lkaxegm826bjpoo9m5&format=json&uncompressed_webhook=true",
+                  "serializeUrl": false,
+                  "method": "post",
+                  "headers": [
+                    {
+                      "name": "Authorization",
+                      "value": "Bearer {{2.brightdata_api_key}}"
+                    },
+                    {
+                      "name": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "qs": [],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "authUser": "",
+                  "authPass": "",
+                  "timeout": "",
+                  "shareCookies": false,
+                  "ca": "",
+                  "rejectUnauthorized": true,
+                  "followRedirect": true,
+                  "useQuerystring": false,
+                  "gzip": true,
+                  "useMtls": false,
+                  "contentType": "application/json",
+                  "data": "[{\"url\": \"{{101.value}}\", \"num_of_posts\": 50, \"start_date\": \"{{2.start_date}}\", \"end_date\": \"{{2.end_date}}\"}]"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": -300,
+                    "name": "Trigger Facebook Scraper"
+                  },
+                  "restore": {
+                    "expect": {
+                      "method": {
+                        "mode": "chose",
+                        "label": "POST"
+                      },
+                      "bodyType": {
+                        "label": "Raw"
+                      },
+                      "contentType": {
+                        "label": "JSON (application/json)"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "id": 103,
+                "module": "builtin:Sleep",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "delay": 30
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": -300,
+                    "name": "Wait 30s for Facebook"
+                  }
+                }
+              },
+              {
+                "id": 104,
+                "module": "builtin:BasicRepeater",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "repeats": 20
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": -300,
+                    "name": "Poll Facebook Status (max 20 times)"
+                  }
+                }
+              },
+              {
+                "id": 105,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/snapshot/{{102.data.snapshot_id}}?format=json",
+                  "serializeUrl": false,
+                  "method": "get",
+                  "headers": [
+                    {
+                      "name": "Authorization",
+                      "value": "Bearer {{2.brightdata_api_key}}"
+                    }
+                  ],
+                  "qs": [],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "authUser": "",
+                  "authPass": "",
+                  "timeout": "",
+                  "shareCookies": false,
+                  "ca": "",
+                  "rejectUnauthorized": true,
+                  "followRedirect": true,
+                  "useQuerystring": false,
+                  "gzip": true,
+                  "useMtls": false
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1800,
+                    "y": -300,
+                    "name": "Check Facebook Snapshot Status"
+                  }
+                }
+              },
+              {
+                "id": 106,
+                "module": "builtin:BasicFilter",
+                "version": 1,
+                "parameters": {
+                  "condition": "{{105.statusCode = 200}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2100,
+                    "y": -300,
+                    "name": "Filter - Facebook Data Ready"
+                  },
+                  "filter": {
+                    "name": "Facebook Data Ready",
+                    "conditions": [
+                      [
+                        {
+                          "a": "{{105.statusCode}}",
+                          "b": "200",
+                          "o": "number:equal"
+                        }
+                      ]
+                    ]
+                  }
+                }
+              },
+              {
+                "id": 107,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "array": "{{105.data}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2400,
+                    "y": -300,
+                    "name": "Iterator - Facebook Posts"
+                  }
+                }
+              },
+              {
+                "id": 108,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {
+                  "__IMTCONN__": "__GOOGLE_CONNECTION__"
+                },
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "__POSTS_SHEET_ID__",
+                  "values": {
+                    "0": "Facebook",
+                    "1": "{{107.post_id}}",
+                    "2": "{{107.url}}",
+                    "3": "{{107.page_name}}",
+                    "4": "{{107.content}}",
+                    "5": "{{107.date_posted}}",
+                    "6": "{{join(107.hashtags; \", \")}}",
+                    "7": "{{107.num_likes}}",
+                    "8": "{{107.num_comments}}",
+                    "9": "{{107.num_shares}}",
+                    "10": "{{now}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS",
+                  "insertUnformatted": false
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2700,
+                    "y": -300,
+                    "name": "Add Facebook Post to Sheet"
+                  }
+                }
+              }
+            ],
+            "label": "Facebook Route"
+          },
+          {
+            "flow": [
+              {
+                "id": 201,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "array": "{{1.twitter_urls}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 600,
+                    "y": 0,
+                    "name": "Iterator - Twitter URLs"
+                  }
+                }
+              },
+              {
+                "id": 202,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lwxmeb2u1cniijd7t4&format=json&uncompressed_webhook=true",
+                  "serializeUrl": false,
+                  "method": "post",
+                  "headers": [
+                    {
+                      "name": "Authorization",
+                      "value": "Bearer {{2.brightdata_api_key}}"
+                    },
+                    {
+                      "name": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "qs": [],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "authUser": "",
+                  "authPass": "",
+                  "timeout": "",
+                  "shareCookies": false,
+                  "ca": "",
+                  "rejectUnauthorized": true,
+                  "followRedirect": true,
+                  "useQuerystring": false,
+                  "gzip": true,
+                  "useMtls": false,
+                  "contentType": "application/json",
+                  "data": "[{\"url\": \"{{201.value}}\", \"num_of_posts\": 50, \"start_date\": \"{{2.start_date}}\", \"end_date\": \"{{2.end_date}}\"}]"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": 0,
+                    "name": "Trigger Twitter Scraper"
+                  }
+                }
+              },
+              {
+                "id": 203,
+                "module": "builtin:Sleep",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "delay": 30
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": 0,
+                    "name": "Wait 30s for Twitter"
+                  }
+                }
+              },
+              {
+                "id": 204,
+                "module": "builtin:BasicRepeater",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "repeats": 20
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": 0,
+                    "name": "Poll Twitter Status (max 20 times)"
+                  }
+                }
+              },
+              {
+                "id": 205,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/snapshot/{{202.data.snapshot_id}}?format=json",
+                  "serializeUrl": false,
+                  "method": "get",
+                  "headers": [
+                    {
+                      "name": "Authorization",
+                      "value": "Bearer {{2.brightdata_api_key}}"
+                    }
+                  ],
+                  "qs": [],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "authUser": "",
+                  "authPass": "",
+                  "timeout": "",
+                  "shareCookies": false,
+                  "ca": "",
+                  "rejectUnauthorized": true,
+                  "followRedirect": true,
+                  "useQuerystring": false,
+                  "gzip": true,
+                  "useMtls": false
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1800,
+                    "y": 0,
+                    "name": "Check Twitter Snapshot Status"
+                  }
+                }
+              },
+              {
+                "id": 206,
+                "module": "builtin:BasicFilter",
+                "version": 1,
+                "parameters": {
+                  "condition": "{{205.statusCode = 200}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2100,
+                    "y": 0,
+                    "name": "Filter - Twitter Data Ready"
+                  },
+                  "filter": {
+                    "name": "Twitter Data Ready",
+                    "conditions": [
+                      [
+                        {
+                          "a": "{{205.statusCode}}",
+                          "b": "200",
+                          "o": "number:equal"
+                        }
+                      ]
+                    ]
+                  }
+                }
+              },
+              {
+                "id": 207,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "array": "{{205.data}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2400,
+                    "y": 0,
+                    "name": "Iterator - Twitter Posts"
+                  }
+                }
+              },
+              {
+                "id": 208,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {
+                  "__IMTCONN__": "__GOOGLE_CONNECTION__"
+                },
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "__POSTS_SHEET_ID__",
+                  "values": {
+                    "0": "Twitter",
+                    "1": "{{207.id}}",
+                    "2": "{{207.url}}",
+                    "3": "{{207.user_posted}}",
+                    "4": "{{207.description}}",
+                    "5": "{{207.date_posted}}",
+                    "6": "{{join(207.hashtags; \", \")}}",
+                    "7": "{{207.likes}}",
+                    "8": "{{207.replies}}",
+                    "9": "{{207.reposts}}",
+                    "10": "{{now}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS",
+                  "insertUnformatted": false
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2700,
+                    "y": 0,
+                    "name": "Add Twitter Post to Sheet"
+                  }
+                }
+              }
+            ],
+            "label": "Twitter Route"
+          },
+          {
+            "flow": [
+              {
+                "id": 301,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "array": "{{1.linkedin_urls}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 600,
+                    "y": 300,
+                    "name": "Iterator - LinkedIn URLs"
+                  }
+                }
+              },
+              {
+                "id": 302,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lyy3tktm25m4avu764&format=json&uncompressed_webhook=true",
+                  "serializeUrl": false,
+                  "method": "post",
+                  "headers": [
+                    {
+                      "name": "Authorization",
+                      "value": "Bearer {{2.brightdata_api_key}}"
+                    },
+                    {
+                      "name": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "qs": [],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "authUser": "",
+                  "authPass": "",
+                  "timeout": "",
+                  "shareCookies": false,
+                  "ca": "",
+                  "rejectUnauthorized": true,
+                  "followRedirect": true,
+                  "useQuerystring": false,
+                  "gzip": true,
+                  "useMtls": false,
+                  "contentType": "application/json",
+                  "data": "[{\"url\": \"{{301.value}}\", \"num_of_posts\": 50, \"start_date\": \"{{2.start_date}}\", \"end_date\": \"{{2.end_date}}\"}]"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": 300,
+                    "name": "Trigger LinkedIn Scraper"
+                  }
+                }
+              },
+              {
+                "id": 303,
+                "module": "builtin:Sleep",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "delay": 30
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": 300,
+                    "name": "Wait 30s for LinkedIn"
+                  }
+                }
+              },
+              {
+                "id": 304,
+                "module": "builtin:BasicRepeater",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "repeats": 20
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": 300,
+                    "name": "Poll LinkedIn Status (max 20 times)"
+                  }
+                }
+              },
+              {
+                "id": 305,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/snapshot/{{302.data.snapshot_id}}?format=json",
+                  "serializeUrl": false,
+                  "method": "get",
+                  "headers": [
+                    {
+                      "name": "Authorization",
+                      "value": "Bearer {{2.brightdata_api_key}}"
+                    }
+                  ],
+                  "qs": [],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "authUser": "",
+                  "authPass": "",
+                  "timeout": "",
+                  "shareCookies": false,
+                  "ca": "",
+                  "rejectUnauthorized": true,
+                  "followRedirect": true,
+                  "useQuerystring": false,
+                  "gzip": true,
+                  "useMtls": false
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1800,
+                    "y": 300,
+                    "name": "Check LinkedIn Snapshot Status"
+                  }
+                }
+              },
+              {
+                "id": 306,
+                "module": "builtin:BasicFilter",
+                "version": 1,
+                "parameters": {
+                  "condition": "{{305.statusCode = 200}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2100,
+                    "y": 300,
+                    "name": "Filter - LinkedIn Data Ready"
+                  },
+                  "filter": {
+                    "name": "LinkedIn Data Ready",
+                    "conditions": [
+                      [
+                        {
+                          "a": "{{305.statusCode}}",
+                          "b": "200",
+                          "o": "number:equal"
+                        }
+                      ]
+                    ]
+                  }
+                }
+              },
+              {
+                "id": 307,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "mapper": {
+                  "array": "{{305.data}}"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2400,
+                    "y": 300,
+                    "name": "Iterator - LinkedIn Posts"
+                  }
+                }
+              },
+              {
+                "id": 308,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {
+                  "__IMTCONN__": "__GOOGLE_CONNECTION__"
+                },
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "__POSTS_SHEET_ID__",
+                  "values": {
+                    "0": "LinkedIn",
+                    "1": "{{307.id}}",
+                    "2": "{{307.url}}",
+                    "3": "{{307.user_url}}",
+                    "4": "{{307.post_text}}",
+                    "5": "{{307.date_posted}}",
+                    "6": "{{join(307.hashtags; \", \")}}",
+                    "7": "{{307.num_likes}}",
+                    "8": "{{307.num_comments}}",
+                    "9": "0",
+                    "10": "{{now}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS",
+                  "insertUnformatted": false
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2700,
+                    "y": 300,
+                    "name": "Add LinkedIn Post to Sheet"
+                  }
+                }
+              }
+            ],
+            "label": "LinkedIn Route"
+          }
+        ]
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0,
+          "name": "Router - Platform Split"
+        }
+      }
+    },
+    {
+      "id": 400,
+      "module": "builtin:BasicAggregator",
+      "version": 1,
+      "parameters": {
+        "feederModule": 1
+      },
+      "mapper": {
+        "platform": "{{ifempty(108.platform; ifempty(208.platform; 308.platform))}}",
+        "post_id": "{{ifempty(108.post_id; ifempty(208.id; 308.id))}}",
+        "url": "{{ifempty(108.url; ifempty(208.url; 308.url))}}",
+        "author": "{{ifempty(108.author; ifempty(208.user_posted; 308.user_url))}}",
+        "content": "{{ifempty(108.content; ifempty(208.description; 308.post_text))}}",
+        "timestamp": "{{ifempty(108.timestamp; ifempty(208.date_posted; 308.date_posted))}}",
+        "hashtags": "{{ifempty(108.hashtags; ifempty(208.hashtags; 308.hashtags))}}",
+        "likes": "{{ifempty(108.likes; ifempty(208.likes; 308.num_likes))}}",
+        "comments": "{{ifempty(108.comments; ifempty(208.replies; 308.num_comments))}}",
+        "shares": "{{ifempty(108.shares; ifempty(208.reposts; 0))}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 3000,
+          "y": 0,
+          "name": "Aggregate All Posts"
+        }
+      }
+    },
+    {
+      "id": 401,
+      "module": "gateway:WebhookRespond",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "status": 200,
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": "{\"success\": true, \"message\": \"Scraping completed\", \"execution_date\": \"{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}\", \"date_range\": {\"start\": \"{{2.start_date}}\", \"end\": \"{{2.end_date}}\"}, \"posts\": {{toJSON(400.array)}}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 3300,
+          "y": 0,
+          "name": "Webhook Response - Return JSON"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "slots": null,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": {
+      "orphans": []
+    },
+    "zone": "us1.make.com"
+  }
+}
