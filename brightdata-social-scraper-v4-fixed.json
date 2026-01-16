@@ -1,0 +1,499 @@
+{
+  "name": "Bright Data Social Scraper V4 - Fixed Google Sheets",
+  "flow": [
+    {
+      "id": 1,
+      "module": "google-sheets:getValues",
+      "version": 2,
+      "parameters": {
+        "__IMTCONN__": "__GOOGLE_CONNECTION__"
+      },
+      "mapper": {
+        "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+        "range": "Leads!A2:E100",
+        "valueRenderOption": "FORMATTED_VALUE",
+        "dateTimeRenderOption": "FORMATTED_STRING"
+      },
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0,
+          "name": "1. Get Lead URLs (Rows 2-100)"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "builtin:BasicFeeder",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "array": "{{1.values}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0,
+          "name": "2. Loop Through Each Lead"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "module": "util:SetVariables",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "variables": [
+          {
+            "name": "end_date",
+            "value": "{{formatDate(now; \"MM-DD-YYYY\")}}"
+          },
+          {
+            "name": "start_date",
+            "value": "{{formatDate(addDays(now; -7); \"MM-DD-YYYY\")}}"
+          },
+          {
+            "name": "brightdata_api_key",
+            "value": "__YOUR_BRIGHTDATA_API_KEY__"
+          },
+          {
+            "name": "lead_id",
+            "value": "{{2.`0`}}"
+          },
+          {
+            "name": "linkedin_url",
+            "value": "{{2.`1`}}"
+          },
+          {
+            "name": "twitter_url",
+            "value": "{{2.`2`}}"
+          },
+          {
+            "name": "facebook_url",
+            "value": "{{2.`3`}}"
+          }
+        ],
+        "scope": "roundtrip"
+      },
+      "metadata": {
+        "designer": {
+          "x": 600,
+          "y": 0,
+          "name": "3. Set Variables (Dates + Lead Data)"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "parameters": {
+        "routes": [
+          {
+            "label": "LinkedIn",
+            "flow": [
+              {
+                "id": 101,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "filter": {
+                  "name": "Has LinkedIn URL",
+                  "conditions": [[{"a": "{{3.linkedin_url}}", "o": "text:isnotempty"}]]
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lyy3tktm25m4avu764&format=json",
+                  "method": "post",
+                  "headers": [
+                    {"name": "Authorization", "value": "Bearer {{3.brightdata_api_key}}"},
+                    {"name": "Content-Type", "value": "application/json"}
+                  ],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "contentType": "application/json",
+                  "data": "[{\"url\": \"{{3.linkedin_url}}\"}]",
+                  "timeout": 60000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": -300,
+                    "name": "4a. Trigger LinkedIn API"
+                  }
+                }
+              },
+              {
+                "id": 102,
+                "module": "builtin:Sleep",
+                "version": 1,
+                "parameters": {},
+                "mapper": {"delay": 90},
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": -300,
+                    "name": "5a. Wait 90 seconds"
+                  }
+                }
+              },
+              {
+                "id": 103,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/snapshot/{{101.data.snapshot_id}}?format=json",
+                  "method": "get",
+                  "headers": [
+                    {"name": "Authorization", "value": "Bearer {{3.brightdata_api_key}}"}
+                  ],
+                  "parseResponse": true,
+                  "timeout": 120000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": -300,
+                    "name": "6a. Get LinkedIn Results"
+                  }
+                }
+              },
+              {
+                "id": 104,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "filter": {
+                  "name": "Data Ready (200)",
+                  "conditions": [[{"a": "{{103.statusCode}}", "b": "200", "o": "number:equal"}]]
+                },
+                "mapper": {"array": "{{103.data}}"},
+                "metadata": {
+                  "designer": {
+                    "x": 1800,
+                    "y": -300,
+                    "name": "7a. Loop LinkedIn Posts"
+                  }
+                }
+              },
+              {
+                "id": 105,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Posts",
+                  "values": {
+                    "0": "{{3.lead_id}}",
+                    "1": "LinkedIn",
+                    "2": "{{ifempty(104.id; 104.post_id)}}",
+                    "3": "{{104.url}}",
+                    "4": "{{ifempty(104.user_url; 3.linkedin_url)}}",
+                    "5": "{{ifempty(104.post_text; 104.text)}}",
+                    "6": "{{104.date_posted}}",
+                    "7": "{{ifempty(join(104.hashtags; \", \"); \"\")}}",
+                    "8": "{{104.num_likes}}",
+                    "9": "{{104.num_comments}}",
+                    "10": "0",
+                    "11": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2100,
+                    "y": -300,
+                    "name": "8a. Save LinkedIn Post"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "label": "Twitter",
+            "flow": [
+              {
+                "id": 201,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "filter": {
+                  "name": "Has Twitter URL",
+                  "conditions": [[{"a": "{{3.twitter_url}}", "o": "text:isnotempty"}]]
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lwxmeb2u1cniijd7t4&format=json",
+                  "method": "post",
+                  "headers": [
+                    {"name": "Authorization", "value": "Bearer {{3.brightdata_api_key}}"},
+                    {"name": "Content-Type", "value": "application/json"}
+                  ],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "contentType": "application/json",
+                  "data": "[{\"url\": \"{{3.twitter_url}}\", \"num_of_posts\": 50, \"start_date\": \"{{3.start_date}}\", \"end_date\": \"{{3.end_date}}\"}]",
+                  "timeout": 60000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": 0,
+                    "name": "4b. Trigger Twitter API"
+                  }
+                }
+              },
+              {
+                "id": 202,
+                "module": "builtin:Sleep",
+                "version": 1,
+                "parameters": {},
+                "mapper": {"delay": 90},
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": 0,
+                    "name": "5b. Wait 90 seconds"
+                  }
+                }
+              },
+              {
+                "id": 203,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/snapshot/{{201.data.snapshot_id}}?format=json",
+                  "method": "get",
+                  "headers": [
+                    {"name": "Authorization", "value": "Bearer {{3.brightdata_api_key}}"}
+                  ],
+                  "parseResponse": true,
+                  "timeout": 120000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": 0,
+                    "name": "6b. Get Twitter Results"
+                  }
+                }
+              },
+              {
+                "id": 204,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "filter": {
+                  "name": "Data Ready (200)",
+                  "conditions": [[{"a": "{{203.statusCode}}", "b": "200", "o": "number:equal"}]]
+                },
+                "mapper": {"array": "{{203.data}}"},
+                "metadata": {
+                  "designer": {
+                    "x": 1800,
+                    "y": 0,
+                    "name": "7b. Loop Twitter Posts"
+                  }
+                }
+              },
+              {
+                "id": 205,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Posts",
+                  "values": {
+                    "0": "{{3.lead_id}}",
+                    "1": "Twitter",
+                    "2": "{{204.id}}",
+                    "3": "{{204.url}}",
+                    "4": "{{204.user_posted}}",
+                    "5": "{{204.description}}",
+                    "6": "{{204.date_posted}}",
+                    "7": "{{ifempty(join(204.hashtags; \", \"); \"\")}}",
+                    "8": "{{204.likes}}",
+                    "9": "{{204.replies}}",
+                    "10": "{{204.reposts}}",
+                    "11": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2100,
+                    "y": 0,
+                    "name": "8b. Save Twitter Post"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "label": "Facebook",
+            "flow": [
+              {
+                "id": 301,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "filter": {
+                  "name": "Has Facebook URL",
+                  "conditions": [[{"a": "{{3.facebook_url}}", "o": "text:isnotempty"}]]
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/trigger?dataset_id=gd_lkaxegm826bjpoo9m5&format=json",
+                  "method": "post",
+                  "headers": [
+                    {"name": "Authorization", "value": "Bearer {{3.brightdata_api_key}}"},
+                    {"name": "Content-Type", "value": "application/json"}
+                  ],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "contentType": "application/json",
+                  "data": "[{\"url\": \"{{3.facebook_url}}\", \"num_of_posts\": 50, \"start_date\": \"{{3.start_date}}\", \"end_date\": \"{{3.end_date}}\"}]",
+                  "timeout": 60000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": 300,
+                    "name": "4c. Trigger Facebook API"
+                  }
+                }
+              },
+              {
+                "id": 302,
+                "module": "builtin:Sleep",
+                "version": 1,
+                "parameters": {},
+                "mapper": {"delay": 90},
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": 300,
+                    "name": "5c. Wait 90 seconds"
+                  }
+                }
+              },
+              {
+                "id": 303,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "mapper": {
+                  "url": "https://api.brightdata.com/datasets/v3/snapshot/{{301.data.snapshot_id}}?format=json",
+                  "method": "get",
+                  "headers": [
+                    {"name": "Authorization", "value": "Bearer {{3.brightdata_api_key}}"}
+                  ],
+                  "parseResponse": true,
+                  "timeout": 120000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": 300,
+                    "name": "6c. Get Facebook Results"
+                  }
+                }
+              },
+              {
+                "id": 304,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "filter": {
+                  "name": "Data Ready (200)",
+                  "conditions": [[{"a": "{{303.statusCode}}", "b": "200", "o": "number:equal"}]]
+                },
+                "mapper": {"array": "{{303.data}}"},
+                "metadata": {
+                  "designer": {
+                    "x": 1800,
+                    "y": 300,
+                    "name": "7c. Loop Facebook Posts"
+                  }
+                }
+              },
+              {
+                "id": 305,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Posts",
+                  "values": {
+                    "0": "{{3.lead_id}}",
+                    "1": "Facebook",
+                    "2": "{{304.post_id}}",
+                    "3": "{{304.url}}",
+                    "4": "{{304.page_name}}",
+                    "5": "{{304.content}}",
+                    "6": "{{304.date_posted}}",
+                    "7": "{{ifempty(join(304.hashtags; \", \"); \"\")}}",
+                    "8": "{{304.num_likes}}",
+                    "9": "{{304.num_comments}}",
+                    "10": "{{304.num_shares}}",
+                    "11": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 2100,
+                    "y": 300,
+                    "name": "8c. Save Facebook Post"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "metadata": {
+        "designer": {
+          "x": 900,
+          "y": 0,
+          "name": "ROUTER - All Platforms"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": false,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "sequential": true
+    },
+    "designer": {
+      "orphans": []
+    },
+    "zone": "us1.make.com"
+  }
+}
