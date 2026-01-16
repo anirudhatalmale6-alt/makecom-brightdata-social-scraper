@@ -1,0 +1,480 @@
+{
+  "name": "Apify Social Media Scraper - LinkedIn, Twitter, Facebook",
+  "flow": [
+    {
+      "id": 1,
+      "module": "google-sheets:getValues",
+      "version": 2,
+      "parameters": {
+        "__IMTCONN__": "__GOOGLE_CONNECTION__"
+      },
+      "mapper": {
+        "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+        "range": "Leads!A2:E100",
+        "valueRenderOption": "FORMATTED_VALUE",
+        "dateTimeRenderOption": "FORMATTED_STRING"
+      },
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0,
+          "name": "1. Get Leads from Google Sheet"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "builtin:BasicFeeder",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "array": "{{1.values}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0,
+          "name": "2. Loop Through Each Lead"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "module": "util:SetVariables",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "variables": [
+          {
+            "name": "apify_api_token",
+            "value": "__YOUR_APIFY_API_TOKEN__"
+          },
+          {
+            "name": "lead_id",
+            "value": "{{2.`0`}}"
+          },
+          {
+            "name": "linkedin_url",
+            "value": "{{2.`1`}}"
+          },
+          {
+            "name": "twitter_url",
+            "value": "{{2.`2`}}"
+          },
+          {
+            "name": "facebook_url",
+            "value": "{{2.`3`}}"
+          }
+        ],
+        "scope": "roundtrip"
+      },
+      "metadata": {
+        "designer": {
+          "x": 600,
+          "y": 0,
+          "name": "3. Set Variables"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "parameters": {
+        "routes": [
+          {
+            "label": "LinkedIn",
+            "flow": [
+              {
+                "id": 101,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "filter": {
+                  "name": "Has LinkedIn URL",
+                  "conditions": [[{"a": "{{3.linkedin_url}}", "o": "text:isnotempty"}]]
+                },
+                "mapper": {
+                  "url": "https://api.apify.com/v2/acts/harvestapi~linkedin-profile-posts/run-sync-get-dataset-items?token={{3.apify_api_token}}",
+                  "method": "post",
+                  "headers": [
+                    {"name": "Content-Type", "value": "application/json"}
+                  ],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "contentType": "application/json",
+                  "data": "{\"profileUrls\": [\"{{3.linkedin_url}}\"]}",
+                  "timeout": 300000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": -300,
+                    "name": "4a. Apify LinkedIn Posts"
+                  }
+                }
+              },
+              {
+                "id": 102,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "filter": {
+                  "name": "Has Data",
+                  "conditions": [[{"a": "{{101.statusCode}}", "b": "201", "o": "number:equal"}]]
+                },
+                "mapper": {"array": "{{101.data}}"},
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": -300,
+                    "name": "5a. Loop LinkedIn Posts"
+                  }
+                }
+              },
+              {
+                "id": 103,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Posts",
+                  "values": {
+                    "0": "{{3.lead_id}}",
+                    "1": "LinkedIn",
+                    "2": "{{ifempty(102.postId; 102.id)}}",
+                    "3": "{{102.postUrl}}",
+                    "4": "{{ifempty(102.authorName; 102.author)}}",
+                    "5": "{{ifempty(102.text; 102.postText)}}",
+                    "6": "{{ifempty(102.postedAt; 102.datePosted)}}",
+                    "7": "{{ifempty(join(102.hashtags; \", \"); \"\")}}",
+                    "8": "{{ifempty(102.likesCount; 102.numLikes)}}",
+                    "9": "{{ifempty(102.commentsCount; 102.numComments)}}",
+                    "10": "{{ifempty(102.sharesCount; 0)}}",
+                    "11": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": -300,
+                    "name": "6a. Save LinkedIn Post"
+                  }
+                }
+              },
+              {
+                "id": 104,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "filter": {
+                  "name": "Error Occurred",
+                  "conditions": [[{"a": "{{101.statusCode}}", "b": "201", "o": "number:notequal"}]]
+                },
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Errors",
+                  "values": {
+                    "0": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}",
+                    "1": "{{3.lead_id}}",
+                    "2": "LinkedIn",
+                    "3": "{{3.linkedin_url}}",
+                    "4": "{{101.statusCode}}",
+                    "5": "{{ifempty(101.data.error; \"Unknown error\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": -150,
+                    "name": "6a-ERR. Log LinkedIn Error"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "label": "Twitter",
+            "flow": [
+              {
+                "id": 201,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "filter": {
+                  "name": "Has Twitter URL",
+                  "conditions": [[{"a": "{{3.twitter_url}}", "o": "text:isnotempty"}]]
+                },
+                "mapper": {
+                  "url": "https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items?token={{3.apify_api_token}}",
+                  "method": "post",
+                  "headers": [
+                    {"name": "Content-Type", "value": "application/json"}
+                  ],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "contentType": "application/json",
+                  "data": "{\"startUrls\": [\"{{3.twitter_url}}\"], \"maxTweets\": 50, \"addUserInfo\": true}",
+                  "timeout": 300000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": 0,
+                    "name": "4b. Apify Twitter Posts"
+                  }
+                }
+              },
+              {
+                "id": 202,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "filter": {
+                  "name": "Has Data",
+                  "conditions": [[{"a": "{{201.statusCode}}", "b": "201", "o": "number:equal"}]]
+                },
+                "mapper": {"array": "{{201.data}}"},
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": 0,
+                    "name": "5b. Loop Twitter Posts"
+                  }
+                }
+              },
+              {
+                "id": 203,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Posts",
+                  "values": {
+                    "0": "{{3.lead_id}}",
+                    "1": "Twitter",
+                    "2": "{{ifempty(202.id; 202.tweetId)}}",
+                    "3": "{{202.url}}",
+                    "4": "{{ifempty(202.author.userName; 202.user.screen_name)}}",
+                    "5": "{{ifempty(202.text; 202.full_text)}}",
+                    "6": "{{ifempty(202.createdAt; 202.created_at)}}",
+                    "7": "{{ifempty(join(202.hashtags; \", \"); \"\")}}",
+                    "8": "{{ifempty(202.likeCount; 202.favorite_count)}}",
+                    "9": "{{ifempty(202.replyCount; 202.reply_count)}}",
+                    "10": "{{ifempty(202.retweetCount; 202.retweet_count)}}",
+                    "11": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": 0,
+                    "name": "6b. Save Twitter Post"
+                  }
+                }
+              },
+              {
+                "id": 204,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "filter": {
+                  "name": "Error Occurred",
+                  "conditions": [[{"a": "{{201.statusCode}}", "b": "201", "o": "number:notequal"}]]
+                },
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Errors",
+                  "values": {
+                    "0": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}",
+                    "1": "{{3.lead_id}}",
+                    "2": "Twitter",
+                    "3": "{{3.twitter_url}}",
+                    "4": "{{201.statusCode}}",
+                    "5": "{{ifempty(201.data.error; \"Unknown error\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": 150,
+                    "name": "6b-ERR. Log Twitter Error"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "label": "Facebook",
+            "flow": [
+              {
+                "id": 301,
+                "module": "http:ActionSendData",
+                "version": 3,
+                "parameters": {
+                  "handleErrors": true,
+                  "useNewZLibDeCompress": true
+                },
+                "filter": {
+                  "name": "Has Facebook URL",
+                  "conditions": [[{"a": "{{3.facebook_url}}", "o": "text:isnotempty"}]]
+                },
+                "mapper": {
+                  "url": "https://api.apify.com/v2/acts/apify~facebook-posts-scraper/run-sync-get-dataset-items?token={{3.apify_api_token}}",
+                  "method": "post",
+                  "headers": [
+                    {"name": "Content-Type", "value": "application/json"}
+                  ],
+                  "bodyType": "raw",
+                  "parseResponse": true,
+                  "contentType": "application/json",
+                  "data": "{\"startUrls\": [{\"url\": \"{{3.facebook_url}}\"}], \"maxPosts\": 50}",
+                  "timeout": 300000
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 900,
+                    "y": 300,
+                    "name": "4c. Apify Facebook Posts"
+                  }
+                }
+              },
+              {
+                "id": 302,
+                "module": "builtin:BasicFeeder",
+                "version": 1,
+                "parameters": {},
+                "filter": {
+                  "name": "Has Data",
+                  "conditions": [[{"a": "{{301.statusCode}}", "b": "201", "o": "number:equal"}]]
+                },
+                "mapper": {"array": "{{301.data}}"},
+                "metadata": {
+                  "designer": {
+                    "x": 1200,
+                    "y": 300,
+                    "name": "5c. Loop Facebook Posts"
+                  }
+                }
+              },
+              {
+                "id": 303,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Posts",
+                  "values": {
+                    "0": "{{3.lead_id}}",
+                    "1": "Facebook",
+                    "2": "{{ifempty(302.postId; 302.id)}}",
+                    "3": "{{302.url}}",
+                    "4": "{{ifempty(302.pageName; 302.authorName)}}",
+                    "5": "{{ifempty(302.text; 302.postText)}}",
+                    "6": "{{ifempty(302.time; 302.timestamp)}}",
+                    "7": "{{ifempty(join(302.hashtags; \", \"); \"\")}}",
+                    "8": "{{ifempty(302.likes; 302.likesCount)}}",
+                    "9": "{{ifempty(302.comments; 302.commentsCount)}}",
+                    "10": "{{ifempty(302.shares; 302.sharesCount)}}",
+                    "11": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": 300,
+                    "name": "6c. Save Facebook Post"
+                  }
+                }
+              },
+              {
+                "id": 304,
+                "module": "google-sheets:addRow",
+                "version": 2,
+                "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+                "filter": {
+                  "name": "Error Occurred",
+                  "conditions": [[{"a": "{{301.statusCode}}", "b": "201", "o": "number:notequal"}]]
+                },
+                "mapper": {
+                  "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+                  "sheetId": "Errors",
+                  "values": {
+                    "0": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\")}}",
+                    "1": "{{3.lead_id}}",
+                    "2": "Facebook",
+                    "3": "{{3.facebook_url}}",
+                    "4": "{{301.statusCode}}",
+                    "5": "{{ifempty(301.data.error; \"Unknown error\")}}"
+                  },
+                  "insertDataOption": "INSERT_ROWS"
+                },
+                "metadata": {
+                  "designer": {
+                    "x": 1500,
+                    "y": 450,
+                    "name": "6c-ERR. Log Facebook Error"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "metadata": {
+        "designer": {
+          "x": 900,
+          "y": 0,
+          "name": "ROUTER - All Platforms"
+        }
+      }
+    },
+    {
+      "id": 400,
+      "module": "google-sheets:updateCell",
+      "version": 2,
+      "parameters": {"__IMTCONN__": "__GOOGLE_CONNECTION__"},
+      "mapper": {
+        "spreadsheetId": "__YOUR_SPREADSHEET_ID__",
+        "sheetId": "Leads",
+        "range": "E{{add(2.__ITERATOR__POSITION__; 1)}}",
+        "value": "Scraped - {{formatDate(now; \"YYYY-MM-DD HH:mm\")}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1800,
+          "y": 0,
+          "name": "7. Update Status"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": false,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "sequential": true
+    },
+    "designer": {
+      "orphans": []
+    },
+    "zone": "us1.make.com"
+  }
+}
